@@ -6,10 +6,12 @@ from app.models import Item
 
 
 def purchase(db: Session, item_id: str, cash_inserted: int) -> dict:
-    item = db.query(Item).filter(Item.id == item_id).first()
+    # Use with_for_update() to handle concurrent purchases of the same item
+    item = db.query(Item).filter(Item.id == item_id).with_for_update().first()
     if not item:
         raise ValueError("item_not_found")
-    time.sleep(0.05)  # demo: widens race window for concurrent purchase/restock
+    # [Bug 5] Artificial Race Window: Removed time.sleep(0.05) introduced for demo purposes.
+
     if item.quantity <= 0:
         raise ValueError("out_of_stock")
     if cash_inserted < item.price:
@@ -41,4 +43,10 @@ def change_breakdown(change: int) -> dict:
         if count > 0:
             result[str(d)] = count
             remaining -= count * d
+    # [Bug 4] Incomplete Change Breakdown: Verified if the full change amount can be returned 
+    # using available denominations.
+    if remaining > 0:
+        raise ValueError("cannot_provide_exact_change")
+    
     return {"change": change, "denominations": result}
+

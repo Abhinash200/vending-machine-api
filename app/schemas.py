@@ -19,13 +19,16 @@ class SlotResponse(BaseModel):
 # --- Item ---
 class ItemCreate(BaseModel):
     name: str
-    price: int = Field(..., ge=0)  # Allow any non-negative price
+    # changed from ge to gt
+    price: int = Field(..., gt=0)  # Allow any non-negative price
     quantity: int = Field(..., gt=0)
 
 
 class ItemBulkEntry(BaseModel):
     name: str
-    price: int = Field(..., ge=0)  # Allow any non-negative price
+    # [Bug 7] Price Validation Discrepancy: Updated to gt=0 to match api-specifications.md
+    price: int = Field(..., gt=0)  # Mandate price > 0 as per spec
+
     quantity: int = Field(..., gt=0)
 
 

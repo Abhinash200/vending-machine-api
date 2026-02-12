@@ -10,10 +10,11 @@ def add_item_to_slot(db: Session, slot_id: str, data: ItemCreate) -> Item:
     slot = db.query(Slot).filter(Slot.id == slot_id).first()
     if not slot:
         raise ValueError("slot_not_found")
+    # [Bug 1] Inverted capacity logic: The original code had an extra check that 
+    # raised capacity_exceeded if count was LESS than MAX_ITEMS_PER_SLOT.
     if slot.current_item_count + data.quantity > slot.capacity:
         raise ValueError("capacity_exceeded")
-    if slot.current_item_count + data.quantity < settings.MAX_ITEMS_PER_SLOT:
-        raise ValueError("capacity_exceeded")
+
     item = Item(
         name=data.name,
         price=data.price,
@@ -31,6 +32,12 @@ def bulk_add_items(db: Session, slot_id: str, entries: list[ItemBulkEntry]) -> i
     slot = db.query(Slot).filter(Slot.id == slot_id).first()
     if not slot:
         raise ValueError("slot_not_found")
+    # [Bug 2] current_item_count Desync: Items were added but slot count was never updated.
+    # Also added capacity check for bulk operations.
+    total_new_quantity = sum(e.quantity for e in entries if e.quantity > 0)
+    if slot.current_item_count + total_new_quantity > slot.capacity:
+        raise ValueError("capacity_exceeded")
+
     added = 0
     for e in entries:
         if e.quantity <= 0:
@@ -38,8 +45,11 @@ def bulk_add_items(db: Session, slot_id: str, entries: list[ItemBulkEntry]) -> i
         item = Item(name=e.name, price=e.price, slot_id=slot_id, quantity=e.quantity)
         db.add(item)
         added += 1
-        db.commit()
-        time.sleep(0.05)  # demo: widens race window vs purchase
+        # [Bug 5] Artificial Race Window: Removed time.sleep(0.05)
+    
+    slot.current_item_count += total_new_quantity
+    db.commit()
+
     return added
 
 
@@ -58,9 +68,11 @@ def update_item_price(db: Session, item_id: str, price: int) -> None:
     item = get_item_by_id(db, item_id)
     if not item:
         raise ValueError("item_not_found")
-    prev_updated = item.updated_at
+    # [Bug 3] The code was manually restoring the old updated_at,
+    # bypassing the database's automatic timestamp update.
     item.price = price
-    item.updated_at = prev_updated
+    # item.updated_at = prev_updated  # Removed to allow automatic update
+
     db.commit()
 
 
